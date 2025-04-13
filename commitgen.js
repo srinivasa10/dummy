@@ -1,113 +1,132 @@
-```javascript
-/**
-* This script is designed to automatically generate a commit message based on the diff of a GitHub commit.
-* It waits for the commit input field to be available, extracts the diff, and then sends a request to a local server to generate a commit message.
-*/
 
-(async function () {
-/**
-* Waits for an input element with the specified selector to be available in the DOM.
-* @param {string} selector - The CSS selector of the input element to wait for.
-* @param {number} [timeout=10000] - The maximum time in milliseconds to wait for the input element.
-* @returns {Promise<HTMLInputElement>} A promise that resolves with the input element when it becomes available.
-*/
-function waitForInput(selector, timeout = 10000) {
-return new Promise((resolve, reject) => {
-const startTime = Date.now();
-const interval = setInterval(() => {
-const input = document.querySelector(selector);
-console.log("⏳ Looking for input...");
-if (input) {
-clearInterval(interval);
-console.log("✅ Found input:", input);
-resolve(input);
-} else if (Date.now() - startTime > timeout) {
-clearInterval(interval);
-console.warn("❌ Still no input. Dumping inputs on page:");
-console.log([...document.querySelectorAll('input')]);
-reject(new Error("Input not found in time"));
+  (function() {
+    // Create and style the floating Analyze Code button
+    let analysisButton =document.querySelector('[data-feature="repo-summary"]');
+    console.log(analysisButton);
+    // Create modal container for the code analysis result and controls
+    let modal = document.createElement("div");
+    modal.id = "analysisModal";
+    modal.style.position = "fixed";
+    modal.style.top = "50%";
+    modal.style.left = "50%";
+    modal.style.transform = "translate(-50%, -50%)";
+    modal.style.width = "100%";
+    modal.style.maxWidth = "600px";
+    modal.style.backgroundColor = "#0d1117";
+    modal.style.border = "1px solid #30363d";
+    modal.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.5";
+    modal.style.padding = "20px";
+    modal.style.zIndex = "10001";
+    modal.style.display = "none";
+   // document.body.style.overflow = "hidden";
+    modal.style.overflowY = "auto";
+    modal.style.maxHeight = "100%";
+    modal.style.color = " #c9d1d9";
+  
+    // Create close button for modal
+    let closeButton = document.createElement("span");
+    closeButton.innerText = "✖";
+    closeButton.style.position = "absolute";
+    closeButton.style.top = "10px";
+    closeButton.style.right = "15px";
+    closeButton.style.cursor = "pointer";
+    closeButton.style.fontSize = "20px";
+    modal.appendChild(closeButton);
+  
+    // Create language selector
+    let languageSelect = document.createElement("select");
+    languageSelect.id = "codeLanguageSelect";
+    languageSelect.style.marginBottom = "10px";
+    languageSelect.style.padding = "5px";
+    // Define available languages (expand as needed)
+    const LANGUAGES = {
+      "en": "English",
+      "hi": "Hindi",
+      "te": "telugu",
+      "ta": "Tamil",
+      "ml": "Malayalam"
+    };
+    for (const code in LANGUAGES) {
+      let option = document.createElement("option");
+      option.value = code;
+      option.innerText = LANGUAGES[code];
+      languageSelect.appendChild(option);
+    }
+    modal.appendChild(languageSelect);
+  
+    // Create Generate Code Analysis button
+    let generateButton = document.createElement("button");
+    generateButton.innerText = "Generate Code Analysis";
+    generateButton.style.marginBottom = "10px";
+    generateButton.style.padding = "8px 12px";
+    generateButton.style.cursor = "pointer";
+    modal.appendChild(generateButton);
+  
+    // Create content container inside modal for the analysis text
+    let analysisContent = document.createElement("div");
+    analysisContent.id = "analysisContent";
+    modal.appendChild(analysisContent);
+    
+    document.body.appendChild(modal);
+  
+    // Close modal when clicking the close button
+    closeButton.addEventListener("click", function() {
+      modal.style.display = "none";
+    });
+  
+    // Show modal when Analyze Code button is clicked
+    analysisButton.addEventListener("click", () => {
+        // Clear previous content
+        document.getElementById("analysisContent").innerText = "";
+        analysisContent.style.fontSize = "1.2rem";
+    analysisContent.style.lineHeight = "1.6";
+    analysisContent.style.fontWeight = "500";
+      modal.style.display = "block";
+    });
+
+    // When the Generate Code Analysis button is clicked
+    generateButton.addEventListener("click", async () => {
+      analysisContent.innerText = "Generating code analysis...";
+
+      // Get selected language
+      let selectedLang = document.getElementById("codeLanguageSelect").value;
+      // Extract code from the page.
+      // GitHub code pages usually display code inside elements with class "blob-code-inner"
+      getGitHubRepoDetailsFromTab(async (codeText) => {
+        if (codeText.error) {
+            commentContent.innerText = data.error;
+            return;
+        }
+      
+    
+      let data = {
+        code: codeText,
+        language: selectedLang
+      };
+      
+      console.log("Extracted Code for Analysis:", data);
+      
+      try {
+        let response = await fetch("http://localhost:5000/analyze_code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        });
+        let result = await response.json();
+        analysisContent.innerHTML  = result.summary;
+      } catch (error) {
+        analysisContent.innerText = "Error contacting backend: " + error.message;
+      }
+   
+    });}
+  );
+   function getGitHubRepoDetailsFromTab(callback) {
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        const activeTab = tabs[0];
+        chrome.tabs.sendMessage(activeTab.id, { action: "codesummarize" }, function(response) {
+            callback(response);
+        });
+    });
 }
-}, 500);
-});
-}
-
-try {
-/**
-* Gets the commit input element and extracts the diff from the page.
-*/
-const commitInput = await waitForInput('#commit-message-input');
-const diffText = extractDiff();
-if (!diffText) {
-console.warn("⚠️ No diff extracted.");
-return;
-}
-
-/**
-* Creates a new button element to trigger the auto-generate commit message functionality.
-*/
-const button = document.createElement('button');
-button.textContent = "✍️ Auto Generate Message";
-button.style = `
-margin-top: 10px;
-background-color: #2da44e;
-color: white;
-padding: 6px 12px;
-border: none;
-border-radius: 6px;
-font-size: 14px;
-cursor: pointer;
-`;
-
-commitInput.parentElement.appendChild(button);
-
-/**
-* Handles the click event of the auto-generate button.
-* Generates a commit message based on the diff and updates the commit input field.
-*/
-button.onclick = async () => {
-button.disabled = true;
-button.textContent = "⏳ Generating...";
-const generatedMessage = await getCommitMessage(diffText);
-commitInput.value = generatedMessage;
-button.textContent = "✅ Message Generated!";
-setTimeout(() => {
-button.textContent = "✍️ Auto Generate Message";
-button.disabled = false;
-}, 2000);
-};
-
-} catch (error) {
-console.warn("⚠️ Could not find commit input:", error);
-}
-
-/**
-* Extracts the diff from the page by selecting all added and removed lines.
-* @returns {string} The extracted diff as a string.
-*/
-function extractDiff() {
-const added = [...document.querySelectorAll('.blob-code-addition')].map(el => '+ ' + el.textContent.trim());
-const removed = [...document.querySelectorAll('.blob-code-deletion')].map(el => '- ' + el.textContent.trim());
-return [...added, ...removed].join('\n');
-}
-
-/**
-* Sends a request to a local server to generate a commit message based on the provided diff.
-* @param {string} diffText - The diff to generate a commit message for.
-* @returns {Promise<string>} A promise that resolves with the generated commit message.
-*/
-async function getCommitMessage(diffText) {
-try {
-const response = await fetch('http://localhost:5000/generate_commit_message', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ diff: diffText })
-});
-const data = await response.json();
-return data.commit_message || "Generated message error.";
-} catch (err) {
-console.error("❌ Error fetching commit message:", err);
-return "Error generating commit message.";
-}
-}
-})();
-```
+  })();
+ 
